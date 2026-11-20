@@ -625,14 +625,14 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Row(
           children: [
-            Container(
-              height: 36,
-              width: 36,
-              decoration: BoxDecoration(
-                color: AppTheme.green,
-                borderRadius: BorderRadius.circular(11),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(11),
+              child: Image.asset(
+                'assets/app_icon.png',
+                height: 36,
+                width: 36,
+                fit: BoxFit.cover,
               ),
-              child: const Icon(Icons.link, color: Colors.white),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -1503,6 +1503,24 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final now = DateTime.now();
+      final monthKey =
+          'wlink_free_submissions_${now.year}_${now.month.toString().padLeft(2, '0')}';
+      final prefs = await SharedPreferences.getInstance();
+      final monthlyCount = prefs.getInt(monthKey) ?? 0;
+
+      if (monthlyCount >= 2) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Free Plan limit reached. You can submit 2 groups per month.',
+            ),
+          ),
+        );
+        return;
+      }
+
       final group = GroupModel(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         name: nameController.text.trim(),
@@ -1523,6 +1541,7 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
       );
 
       await ref.read(groupRepositoryProvider).saveGroup(group);
+      await prefs.setInt(monthKey, monthlyCount + 1);
       ref.invalidate(groupsProvider);
 
       if (!mounted) return;
@@ -1576,32 +1595,32 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
                   : 'Provide accurate details. Groups are saved only on this device and are not published online in this version.',
             ),
             const SizedBox(height: 12),
-            FutureBuilder<List<GroupModel>>(
-              future: ref.read(groupRepositoryProvider).getGroups(),
-              builder: (context, snapshot) {
-                final count =
-                    snapshot.data
-                        ?.where(
-                          (item) => item.createdAt.year == DateTime.now().year,
-                        )
-                        .length ??
-                    0;
-                final remaining = (2 - count).clamp(0, 2);
+            Builder(
+              builder: (context) {
+                final now = DateTime.now();
+                final monthKey =
+                    'wlink_free_submissions_${now.year}_${now.month.toString().padLeft(2, '0')}';
 
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.hourglass_top),
-                    title: Text(
-                      isHindi
-                          ? 'Free Submissions बाकी: $remaining / 2'
-                          : 'Free submissions remaining: $remaining / 2',
-                    ),
-                    subtitle: Text(
-                      isHindi
-                          ? 'इस कैलेंडर वर्ष में इस्तेमाल: $count / 2'
-                          : 'Used this calendar year: $count / 2',
-                    ),
+                return FutureBuilder<int>(
+                  future: SharedPreferences.getInstance().then(
+                    (prefs) => prefs.getInt(monthKey) ?? 0,
                   ),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data ?? 0;
+                    final remaining = (2 - count).clamp(0, 2);
+
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.hourglass_top),
+                        title: Text(
+                          'Free submissions remaining: $remaining / 2',
+                        ),
+                        subtitle: Text(
+                          'Used this month: $count / 2. Resets on the 1st.',
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -2082,19 +2101,6 @@ class SavedGroupsScreen extends ConsumerWidget {
 class MembershipPlansScreen extends StatelessWidget {
   const MembershipPlansScreen({super.key});
 
-  Widget _planPrice(String duration, String price) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(child: Text(duration)),
-          Text(price, style: const TextStyle(fontWeight: FontWeight.w800)),
-        ],
-      ),
-    );
-  }
-
   Widget _feature(String text) {
     return Padding(
       padding: const EdgeInsets.only(top: 9),
@@ -2104,6 +2110,19 @@ class MembershipPlansScreen extends StatelessWidget {
           const Icon(Icons.check_circle, color: AppTheme.green, size: 19),
           const SizedBox(width: 9),
           Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+
+  Widget _price(String duration, String price) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: Text(duration)),
+          Text(price, style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -2123,11 +2142,51 @@ class MembershipPlansScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Enjoy an ad-free experience with more group submission options.',
+            'Compare group submission limits and advertising benefits.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 20),
 
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: AppTheme.green,
+                        size: 27,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Free Plan',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const Chip(label: Text('Default')),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '₹0',
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                  const Divider(height: 24),
+                  _feature('2 new group submissions per month'),
+                  _feature('Advertisements will be shown'),
+                  _feature('Monthly limit resets on the 1st day of each month'),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -2149,24 +2208,24 @@ class MembershipPlansScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Ad-free access with 5 new group submissions per month.',
+                    'Ad-free access with 10 new group submissions per month.',
                   ),
                   const Divider(height: 24),
-                  _planPrice('Monthly', '₹75'),
-                  _planPrice('Quarterly (3 Months)', '₹199'),
-                  _planPrice('Half-Yearly (6 Months)', '₹349'),
-                  _planPrice('Yearly (12 Months)', '₹499'),
-                  _planPrice('Lifetime', '₹1,100'),
+                  _price('Monthly', '₹75'),
+                  _price('Quarterly (3 Months)', '₹199'),
+                  _price('Half-Yearly (6 Months)', '₹349'),
+                  _price('Yearly (12 Months)', '₹499'),
+                  _price('Lifetime', '₹1,100'),
                   const Divider(height: 20),
                   _feature('No advertisements'),
-                  _feature('5 new group submissions per month'),
+                  _feature('10 new group submissions per month'),
+                  _feature('Monthly submission limit resets on the 1st'),
                 ],
               ),
             ),
           ),
 
           const SizedBox(height: 16),
-
           Card(
             child: Container(
               decoration: BoxDecoration(
@@ -2226,7 +2285,7 @@ class MembershipPlansScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
-                      'Membership payments and activation are not available in this version. Payment options will be added in a future update. No plan can be purchased or activated yet.',
+                      'Free Plan is the default plan in this version. Membership payments and activation are not available yet. Paid plan benefits will become active only after payment and membership verification are implemented.',
                     ),
                   ),
                 ],
@@ -2235,7 +2294,7 @@ class MembershipPlansScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Guest users can explore, join and save groups. Group submission requires an eligible membership.',
+            'Guest users can explore, join and save groups. Free Plan allows 2 group submissions per month.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
