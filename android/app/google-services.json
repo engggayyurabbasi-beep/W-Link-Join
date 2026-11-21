@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "136898054022",
+    "project_id": "w-link-join",
+    "storage_bucket": "w-link-join.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:136898054022:android:18dd38b91bc1e23f380e07",
+        "android_client_info": {
+          "package_name": "com.kirzgroup.wlinkjoin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjn4G1nr66M_DWfA5upxf3CyvtUjyVVl0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

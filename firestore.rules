@@ -1,0 +1,229 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validWhatsAppLink(link) {
+      return link is string
+        && link.matches('^https://chat\\.whatsapp\\.com/[A-Za-z0-9_-]+/?$');
+    }
+
+    function validDescription(description) {
+      return description is string
+        && description.matches('^\\s*\\S+(\\s+\\S+){0,99}\\s*$');
+    }
+
+    function validGroupImageUrl(imageUrl, ownerUid) {
+      return imageUrl is string
+        && (
+          imageUrl == ''
+          || (
+            ownerUid is string
+            && imageUrl.matches(
+              '^https://firebasestorage\\.googleapis\\.com/v0/b/w-link-join\\.firebasestorage\\.app/o/group_images%2F'
+              + ownerUid
+              + '%2F[0-9]+\\.(jpg|jpeg|png|webp)\\?alt=media&token=.+$'
+            )
+          )
+        );
+    }
+
+    function isGroupOwner() {
+      return signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    function validCategory(category) {
+      return category in [
+        'Art/Design/Photography',
+        'Auto/Vehicle',
+        'Business/Advertising/Marketing',
+        'Comedy/Funny',
+        'Dating/Flirting/Chatting',
+        'Education/School',
+        'Entertainment/Masti',
+        'Family/Relationships',
+        'Fan Club/Celebrities',
+        'Fashion/Style/Clothing',
+        'Film/Animation',
+        'Food/Drinks',
+        'Gaming/Apps',
+        'Health/Beauty/Fitness',
+        'Jobs/Career',
+        'Money/Earning',
+        'Music/Audio/Songs',
+        'News/Magazines/Politics',
+        'Pets/Animals/Nature',
+        'Roleplay/Comics',
+        'Science/Technology',
+        'Shopping/Buy/Sell',
+        'Social/Friendship/Community',
+        'Spiritual/Devotional',
+        'Sports/Games',
+        'Thoughts/Quotes/Jokes',
+        'Travel/Local/Place',
+        'Food & Recipes',
+        'Local Community',
+        'Parenting & Kids',
+        'Vehicles & Transport',
+        'Other Communities'
+      ];
+    }
+
+    function validGroupData(data) {
+      return data.keys().hasAll([
+          'id',
+          'name',
+          'currentLink',
+          'previousLink',
+          'imageUrl',
+          'category',
+          'subcategory',
+          'country',
+          'state',
+          'city',
+          'language',
+          'description',
+          'rules',
+          'ownerContact',
+          'showOwnerContact',
+          'ownerUid',
+          'approvalStatus',
+          'verificationStatus',
+          'viewCount',
+          'joinClickCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'name',
+          'currentLink',
+          'previousLink',
+          'imageUrl',
+          'category',
+          'subcategory',
+          'country',
+          'state',
+          'city',
+          'language',
+          'description',
+          'rules',
+          'ownerContact',
+          'showOwnerContact',
+          'ownerUid',
+          'approvalStatus',
+          'verificationStatus',
+          'viewCount',
+          'joinClickCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 20
+        && data.currentLink is string
+        && validWhatsAppLink(data.currentLink)
+        && data.previousLink is string
+        && (
+          data.previousLink == ''
+          || validWhatsAppLink(data.previousLink)
+        )
+        && validGroupImageUrl(data.imageUrl, data.ownerUid)
+        && data.category is string
+        && validCategory(data.category)
+        && data.subcategory is string
+        && data.country is string
+        && data.state is string
+        && data.city is string
+        && data.language is string
+        && validDescription(data.description)
+        && data.rules is string
+        && data.ownerContact is string
+        && data.showOwnerContact is bool
+        && (
+          data.showOwnerContact == true
+          || data.ownerContact == ''
+        )
+        && data.ownerUid is string
+        && data.approvalStatus == 'approved'
+        && data.verificationStatus == 'pending'
+        && data.viewCount == 0
+        && data.joinClickCount == 0
+        && data.createdAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    match /groups/{groupId} {
+
+      // Public users can read approved groups.
+      // Owners can also read their own groups.
+      allow read: if resource.data.approvalStatus == 'approved'
+        || isGroupOwner();
+
+      // New groups become live immediately.
+      allow create: if signedIn()
+        && request.resource.data.id == groupId
+        && request.resource.data.ownerUid == request.auth.uid
+        && validGroupData(request.resource.data);
+
+      // Only the owner can edit permitted group information.
+      allow update: if isGroupOwner()
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.approvalStatus == resource.data.approvalStatus
+        && request.resource.data.verificationStatus == resource.data.verificationStatus
+        && request.resource.data.viewCount == resource.data.viewCount
+        && request.resource.data.joinClickCount == resource.data.joinClickCount
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name',
+          'currentLink',
+          'previousLink',
+          'imageUrl',
+          'category',
+          'country',
+          'state',
+          'city',
+          'language',
+          'description',
+          'rules',
+          'ownerContact',
+          'showOwnerContact',
+          'updatedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 20
+        && request.resource.data.currentLink is string
+        && validWhatsAppLink(request.resource.data.currentLink)
+        && request.resource.data.previousLink is string
+        && (
+          request.resource.data.previousLink == ''
+          || validWhatsAppLink(request.resource.data.previousLink)
+        )
+        && validGroupImageUrl(request.resource.data.imageUrl, request.resource.data.ownerUid)
+        && validDescription(request.resource.data.description)
+        && validCategory(request.resource.data.category)
+        && request.resource.data.showOwnerContact is bool
+        && request.resource.data.ownerContact is string
+        && (
+          request.resource.data.showOwnerContact == true
+          || request.resource.data.ownerContact == ''
+        )
+        && request.resource.data.updatedAt == request.time;
+
+      // Group deletion is disabled.
+      allow delete: if false;
+    }
+
+    // All other collections remain inaccessible.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

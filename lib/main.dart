@@ -1,10 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
+
+import 'firebase_options.dart';
+import 'services/firebase_auth_service.dart';
+import 'services/firebase_storage_service.dart';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart' show TextInputFormatter, TextEditingValue, MaxLengthEnforcement;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:countrify/countrify.dart';
 import 'package:country/country.dart' as country_data;
@@ -15,7 +22,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/group_model.dart';
 import 'data/group_repository.dart';
+import 'data/firestore_group_repository.dart';
 import 'data/group_categories.dart';
+
+class _WordLimitFormatter extends TextInputFormatter {
+  _WordLimitFormatter(this.maxWords);
+
+  final int maxWords;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text.trim();
+    final words = text.isEmpty
+        ? <String>[]
+        : text.split(RegExp(r'\s+'));
+
+    return words.length <= maxWords ? newValue : oldValue;
+  }
+}
 
 class WLinkInterstitialController {
   // Ads are disabled in this test build.
@@ -32,6 +59,17 @@ AppLanguage _initialLanguage = AppLanguage.english;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  try {
+    final guestUser = await FirebaseAuthService.ensureGuestSignIn();
+    debugPrint('Firebase guest authentication ready: ${guestUser.uid}');
+  } catch (error, stackTrace) {
+    debugPrint('Firebase guest authentication unavailable');
+    debugPrint('$error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+
   debugPrint('AdMob disabled for startup testing');
 
   try {
@@ -59,8 +97,12 @@ final groupRepositoryProvider = Provider<GroupRepository>(
   (ref) => GroupRepository(),
 );
 
-final groupsProvider = FutureProvider<List<GroupModel>>(
-  (ref) => ref.watch(groupRepositoryProvider).getGroups(),
+final firestoreGroupRepositoryProvider = Provider<FirestoreGroupRepository>(
+  (ref) => FirestoreGroupRepository(),
+);
+
+final groupsProvider = StreamProvider<List<GroupModel>>(
+  (ref) => ref.watch(firestoreGroupRepositoryProvider).watchApprovedGroups(),
 );
 
 final savedGroupIdsProvider = FutureProvider<List<String>>(
@@ -87,7 +129,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/membership',
             builder: (context, state) => const MembershipPlansScreen(),
           ),
-          GoRoute(path: '/submit', redirect: (context, state) => '/membership'),
+          GoRoute(
+            path: '/submit',
+            builder: (context, state) => const SubmitGroupScreen(),
+          ),
           GoRoute(
             path: '/saved',
             builder: (context, state) => const SavedGroupsScreen(),
@@ -1521,12 +1566,22 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
         return;
       }
 
+      final groupId = DateTime.now().microsecondsSinceEpoch.toString();
+      String imageUrl = '';
+
+      if (selectedImagePath != null) {
+        imageUrl = await FirebaseStorageService().uploadGroupImage(
+          groupId: groupId,
+          imageFile: File(selectedImagePath!),
+        );
+      }
+
       final group = GroupModel(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        id: groupId,
         name: nameController.text.trim(),
         currentLink: currentLinkController.text.trim(),
         previousLink: '',
-        imageUrl: selectedImagePath ?? '',
+        imageUrl: imageUrl,
         category: categoryController.text.trim(),
         subcategory: '',
         country: countryController.text.trim(),
@@ -1540,7 +1595,7 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
         createdAt: DateTime.now(),
       );
 
-      await ref.read(groupRepositoryProvider).saveGroup(group);
+      await ref.read(firestoreGroupRepositoryProvider).submitGroup(group);
       await prefs.setInt(monthKey, monthlyCount + 1);
       ref.invalidate(groupsProvider);
 
@@ -1673,6 +1728,8 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
             TextFormField(
               controller: nameController,
               validator: requiredValidator,
+              maxLength: 20,
+              maxLengthEnforcement: MaxLengthEnforcement.enforced,
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 hintText: isHindi ? 'Group का नाम' : 'Enter group name',
@@ -1851,6 +1908,7 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
             TextFormField(
               controller: descriptionController,
               validator: requiredValidator,
+              inputFormatters: [_WordLimitFormatter(100)],
               minLines: 4,
               maxLines: 7,
               decoration: const InputDecoration(

@@ -5,7 +5,10 @@ class GroupModel {
   final String previousLink;
   final String imageUrl;
   final String category;
+
+  // Retained only for compatibility with older local data.
   final String subcategory;
+
   final String country;
   final String state;
   final String city;
@@ -14,7 +17,15 @@ class GroupModel {
   final String rules;
   final String ownerContact;
   final bool showOwnerContact;
+
+  final String ownerUid;
+  final String approvalStatus;
+  final String verificationStatus;
+  final int viewCount;
+  final int joinClickCount;
+
   final DateTime createdAt;
+  final DateTime? updatedAt;
 
   const GroupModel({
     required this.id,
@@ -23,7 +34,7 @@ class GroupModel {
     this.previousLink = '',
     required this.imageUrl,
     required this.category,
-    required this.subcategory,
+    this.subcategory = '',
     required this.country,
     required this.state,
     required this.city,
@@ -32,7 +43,13 @@ class GroupModel {
     required this.rules,
     this.ownerContact = '',
     this.showOwnerContact = false,
+    this.ownerUid = '',
+    this.approvalStatus = 'pending',
+    this.verificationStatus = 'pending',
+    this.viewCount = 0,
+    this.joinClickCount = 0,
     required this.createdAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -51,20 +68,44 @@ class GroupModel {
     'rules': rules,
     'ownerContact': ownerContact,
     'showOwnerContact': showOwnerContact,
+    'ownerUid': ownerUid,
+    'approvalStatus': approvalStatus,
+    'verificationStatus': verificationStatus,
+    'viewCount': viewCount,
+    'joinClickCount': joinClickCount,
     'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt?.toIso8601String(),
   };
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
-    String readString(String key, {String? fallback}) {
+    String readString(String key, {String fallback = ''}) {
       final value = json[key];
-      if (value is String) return value;
-      if (fallback != null) return fallback;
-      throw FormatException('Invalid or missing field: $key');
+      return value is String ? value : fallback;
     }
 
-    final rawDate = json['createdAt'];
-    final createdAt = rawDate is String ? DateTime.tryParse(rawDate) : null;
+    int readInt(String key) {
+      final value = json[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return 0;
+    }
 
+    DateTime? readDate(dynamic value) {
+      if (value is DateTime) return value;
+      if (value is String) return DateTime.tryParse(value);
+
+      // Supports Firestore Timestamp without coupling this model to Firestore.
+      if (value != null && value.runtimeType.toString() == 'Timestamp') {
+        try {
+          return (value as dynamic).toDate() as DateTime;
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    final createdAt = readDate(json['createdAt']);
     if (createdAt == null) {
       throw const FormatException('Invalid or missing createdAt');
     }
@@ -78,7 +119,7 @@ class GroupModel {
       id: readString('id'),
       name: readString('name'),
       currentLink: readString('currentLink'),
-      previousLink: readString('previousLink', fallback: ''),
+      previousLink: readString('previousLink'),
       imageUrl: readString('imageUrl'),
       category: readString('category'),
       subcategory: readString('subcategory'),
@@ -88,9 +129,15 @@ class GroupModel {
       language: readString('language'),
       description: readString('description'),
       rules: readString('rules'),
-      ownerContact: readString('ownerContact', fallback: ''),
+      ownerContact: readString('ownerContact'),
       showOwnerContact: rawShowContact as bool? ?? false,
+      ownerUid: readString('ownerUid'),
+      approvalStatus: readString('approvalStatus', fallback: 'pending'),
+      verificationStatus: readString('verificationStatus', fallback: 'pending'),
+      viewCount: readInt('viewCount'),
+      joinClickCount: readInt('joinClickCount'),
       createdAt: createdAt,
+      updatedAt: readDate(json['updatedAt']),
     );
   }
 }

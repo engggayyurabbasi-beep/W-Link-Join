@@ -45,6 +45,12 @@ dependencies:
   language_code: ^0.7.1
   image_picker: ^1.2.4
   path_provider: ^2.1.6
+  firebase_core: ^5.2.0
+  firebase_auth: ^7.1.0
+  cloud_firestore: ^7.2.0
+  firebase_storage: ^14.1.0
+  firebase_messaging: ^17.1.0
+  flutter_local_notifications: ^23.0.3
 
 dependency_overrides:
   shared_preferences_android: 2.4.28
