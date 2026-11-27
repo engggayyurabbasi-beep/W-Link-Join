@@ -2,11 +2,13 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    match /group_images/{userId}/{fileName} {
+    match /group_images/{userId}/{groupId}/image {
       allow read: if true;
 
       allow create, update: if request.auth != null
         && request.auth.uid == userId
+        && groupId.matches('^[A-Za-z0-9_-]{1,80}$')
+        && request.resource.size > 0
         && request.resource.size <= 5 * 1024 * 1024
         && request.resource.contentType in [
           'image/jpeg',

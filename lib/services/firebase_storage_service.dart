@@ -27,6 +27,10 @@ class FirebaseStorageService {
       throw StateError('Selected image file does not exist.');
     }
 
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(groupId)) {
+      throw StateError('Invalid group ID.');
+    }
+
     final extension = imageFile.path.split('.').last.toLowerCase();
 
     const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
@@ -52,7 +56,8 @@ class FirebaseStorageService {
         .ref()
         .child('group_images')
         .child(user.uid)
-        .child('$groupId.$extension');
+        .child(groupId)
+        .child('image');
 
     await reference.putFile(
       imageFile,

@@ -75,3 +75,29 @@ android/app/google-services.json
 
 # Old source code backups - keep local only
 lib/main.dart.*
+
+# Node.js dependencies
+**/node_modules/
+
+# Local agent and editor data
+.agents/
+.claude/
+agent/
+android/.kotlin/
+
+# Local backups and pre-production snapshots
+*.before_*
+*.pre_production
+*.firebase-backup
+*.backup
+*.bak
+
+# Local generated metadata
+skills-lock.json
+
+# Pre-production JSON backups
+*.pre_production.json
+
+# Firebase Functions generated files
+functions/lib/
+functions/firestore-debug.log

@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import 'firebase_options.dart';
 import 'services/firebase_auth_service.dart';
@@ -11,7 +11,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart' show TextInputFormatter, TextEditingValue, MaxLengthEnforcement;
+import 'package:flutter/services.dart'
+    show TextInputFormatter, TextEditingValue, MaxLengthEnforcement;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:countrify/countrify.dart';
 import 'package:country/country.dart' as country_data;
@@ -24,6 +25,7 @@ import 'models/group_model.dart';
 import 'data/group_repository.dart';
 import 'data/firestore_group_repository.dart';
 import 'data/group_categories.dart';
+import 'admin/admin_login_screen.dart';
 
 class _WordLimitFormatter extends TextInputFormatter {
   _WordLimitFormatter(this.maxWords);
@@ -36,9 +38,7 @@ class _WordLimitFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     final text = newValue.text.trim();
-    final words = text.isEmpty
-        ? <String>[]
-        : text.split(RegExp(r'\s+'));
+    final words = text.isEmpty ? <String>[] : text.split(RegExp(r'\s+'));
 
     return words.length <= maxWords ? newValue : oldValue;
   }
@@ -159,6 +159,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminLoginScreen(),
       ),
     ],
   );
@@ -1548,24 +1552,6 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final now = DateTime.now();
-      final monthKey =
-          'wlink_free_submissions_${now.year}_${now.month.toString().padLeft(2, '0')}';
-      final prefs = await SharedPreferences.getInstance();
-      final monthlyCount = prefs.getInt(monthKey) ?? 0;
-
-      if (monthlyCount >= 2) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Free Plan limit reached. You can submit 2 groups per month.',
-            ),
-          ),
-        );
-        return;
-      }
-
       final groupId = DateTime.now().microsecondsSinceEpoch.toString();
       String imageUrl = '';
 
@@ -1596,20 +1582,13 @@ class _SubmitGroupScreenState extends ConsumerState<SubmitGroupScreen> {
       );
 
       await ref.read(firestoreGroupRepositoryProvider).submitGroup(group);
-      await prefs.setInt(monthKey, monthlyCount + 1);
       ref.invalidate(groupsProvider);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ref.read(languageProvider) == AppLanguage.hindi
-                ? 'Group इस फोन में सफलतापूर्वक सेव हो गया।'
-                : 'Group saved successfully on this device.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Group submitted successfully.')));
 
       context.go('/explore');
     } catch (error) {
@@ -2797,6 +2776,14 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
 
+          _sectionTitle(context, 'Administration'),
+          FeatureTile(
+            icon: Icons.admin_panel_settings_outlined,
+            title: 'Admin Login',
+            subtitle: 'Secure access for authorized administrators',
+            onTap: () => context.push('/admin'),
+          ),
+
           _sectionTitle(context, 'Membership & Account'),
           FeatureTile(
             icon: Icons.workspace_premium_outlined,
@@ -3241,19 +3228,15 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
     if (isSaving) return;
     setState(() => isSaving = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final tickets =
-          prefs.getStringList('wlink_support_tickets') ?? <String>[];
-      final ticket = jsonEncode({
-        'id': DateTime.now().microsecondsSinceEpoch.toString(),
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-south2')
+          .httpsCallable('createSupportTicket');
+
+      await callable.call({
         'category': selectedCategory,
         'issue': selectedIssue,
         'message': messageController.text.trim(),
-        'createdAt': DateTime.now().toIso8601String(),
-        'status': 'Saved on this device',
       });
-      tickets.insert(0, ticket);
-      await prefs.setStringList('wlink_support_tickets', tickets);
+
       if (!mounted) return;
       messageController.clear();
       setState(() {
@@ -3262,9 +3245,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Support request saved on this device. It has not been sent online.',
-          ),
+          content: Text('Support request submitted successfully.'),
         ),
       );
     } catch (_) {
@@ -3289,7 +3270,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Choose the issue that best describes your problem. Your request will be saved on this device in this offline version.',
+            'Choose the issue that best describes your problem and send us the details.',
             style: TextStyle(height: 1.5),
           ),
           const SizedBox(height: 18),

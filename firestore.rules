@@ -14,19 +14,22 @@ service cloud.firestore {
 
     function validDescription(description) {
       return description is string
-        && description.matches('^\\s*\\S+(\\s+\\S+){0,99}\\s*$');
+        && description.matches('^\\s*\\S+(\\s+\\S+){0,49}\\s*$');
     }
 
-    function validGroupImageUrl(imageUrl, ownerUid) {
+    function validGroupImageUrl(imageUrl, ownerUid, groupId) {
       return imageUrl is string
         && (
           imageUrl == ''
           || (
             ownerUid is string
+            && groupId is string
             && imageUrl.matches(
               '^https://firebasestorage\\.googleapis\\.com/v0/b/w-link-join\\.firebasestorage\\.app/o/group_images%2F'
               + ownerUid
-              + '%2F[0-9]+\\.(jpg|jpeg|png|webp)\\?alt=media&token=.+$'
+              + '%2F'
+              + groupId
+              + '%2Fimage\\?alt=media&token=.+$'
             )
           )
         );
@@ -133,7 +136,7 @@ service cloud.firestore {
           data.previousLink == ''
           || validWhatsAppLink(data.previousLink)
         )
-        && validGroupImageUrl(data.imageUrl, data.ownerUid)
+        && validGroupImageUrl(data.imageUrl, data.ownerUid, data.id)
         && data.category is string
         && validCategory(data.category)
         && data.subcategory is string
@@ -150,7 +153,7 @@ service cloud.firestore {
           || data.ownerContact == ''
         )
         && data.ownerUid is string
-        && data.approvalStatus == 'approved'
+        && data.approvalStatus == 'pending'
         && data.verificationStatus == 'pending'
         && data.viewCount == 0
         && data.joinClickCount == 0
@@ -165,60 +168,26 @@ service cloud.firestore {
       allow read: if resource.data.approvalStatus == 'approved'
         || isGroupOwner();
 
-      // New groups become live immediately.
-      allow create: if signedIn()
-        && request.resource.data.id == groupId
-        && request.resource.data.ownerUid == request.auth.uid
-        && validGroupData(request.resource.data);
+      // Group creation is handled only by the Cloud Function.
+      allow create: if false;
 
-      // Only the owner can edit permitted group information.
-      allow update: if isGroupOwner()
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.approvalStatus == resource.data.approvalStatus
-        && request.resource.data.verificationStatus == resource.data.verificationStatus
-        && request.resource.data.viewCount == resource.data.viewCount
-        && request.resource.data.joinClickCount == resource.data.joinClickCount
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name',
-          'currentLink',
-          'previousLink',
-          'imageUrl',
-          'category',
-          'country',
-          'state',
-          'city',
-          'language',
-          'description',
-          'rules',
-          'ownerContact',
-          'showOwnerContact',
-          'updatedAt'
-        ])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 20
-        && request.resource.data.currentLink is string
-        && validWhatsAppLink(request.resource.data.currentLink)
-        && request.resource.data.previousLink is string
-        && (
-          request.resource.data.previousLink == ''
-          || validWhatsAppLink(request.resource.data.previousLink)
-        )
-        && validGroupImageUrl(request.resource.data.imageUrl, request.resource.data.ownerUid)
-        && validDescription(request.resource.data.description)
-        && validCategory(request.resource.data.category)
-        && request.resource.data.showOwnerContact is bool
-        && request.resource.data.ownerContact is string
-        && (
-          request.resource.data.showOwnerContact == true
-          || request.resource.data.ownerContact == ''
-        )
-        && request.resource.data.updatedAt == request.time;
+      // Group updates are handled only by the Cloud Function.
+      allow update: if false;
 
       // Group deletion is disabled.
       allow delete: if false;
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read: if signedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /groupDeletionRequests/{groupId} {
+      allow read: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
     // All other collections remain inaccessible.

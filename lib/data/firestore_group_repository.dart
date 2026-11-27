@@ -1,15 +1,22 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/group_model.dart';
 
 class FirestoreGroupRepository {
-  FirestoreGroupRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  FirestoreGroupRepository({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    FirebaseFunctions? functions,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _functions = functions ??
+           FirebaseFunctions.instanceFor(region: 'asia-south2');
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
   CollectionReference<Map<String, dynamic>> get _groups =>
       _firestore.collection('groups');
@@ -22,60 +29,29 @@ class FirestoreGroupRepository {
     return user.uid;
   }
 
-  // Submit a new group. It becomes live immediately.
+  // Submit a new group through the secure server function.
   Future<void> submitGroup(GroupModel group) async {
-    final uid = _uid;
+    _uid;
 
-    final data = group.toJson()
-      ..['ownerContact'] = group.showOwnerContact ? group.ownerContact : ''
-      ..['ownerUid'] = uid
-      ..['approvalStatus'] = 'approved'
-      ..['verificationStatus'] = 'pending'
-      ..['viewCount'] = 0
-      ..['joinClickCount'] = 0
-      ..['createdAt'] = Timestamp.fromDate(group.createdAt)
-      ..['updatedAt'] = FieldValue.serverTimestamp();
+    final callable = _functions.httpsCallable('submitGroup');
 
-    await _groups.doc(group.id).set(data);
-  }
-
-  // Update an owner's group without taking it offline.
-  Future<void> updateMyGroup(GroupModel group) async {
-    final uid = _uid;
-    final doc = _groups.doc(group.id);
-
-    await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(doc);
-
-      if (!snapshot.exists) {
-        throw StateError('Group not found.');
-      }
-
-      final existing = snapshot.data()!;
-      if (existing['ownerUid'] != uid) {
-        throw StateError('You are not allowed to edit this group.');
-      }
-
-      transaction.update(doc, {
-        'name': group.name,
-        'currentLink': group.currentLink,
-        'previousLink': group.previousLink,
-        'imageUrl': group.imageUrl,
-        'category': group.category,
-        'country': group.country,
-        'state': group.state,
-        'city': group.city,
-        'language': group.language,
-        'description': group.description,
-        'rules': group.rules,
-        'ownerContact': group.showOwnerContact ? group.ownerContact : '',
-        'showOwnerContact': group.showOwnerContact,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    await callable.call({
+      'group': group.toJson(),
     });
   }
 
-  // Public listing: groups are live immediately after submission.
+  // Update an owner's group through the secure server function.
+  Future<void> updateMyGroup(GroupModel group) async {
+    _uid;
+
+    final callable = _functions.httpsCallable('updateGroup');
+
+    await callable.call({
+      'group': group.toJson(),
+    });
+  }
+
+  // Public listing: approved groups remain visible.
   Stream<List<GroupModel>> watchApprovedGroups() {
     return _groups
         .where('approvalStatus', isEqualTo: 'approved')
@@ -88,7 +64,7 @@ class FirestoreGroupRepository {
         );
   }
 
-  // Owner can view their own submissions.
+  // Owners can view their own submissions.
   Stream<List<GroupModel>> watchMyGroups() {
     return _groups
         .where('ownerUid', isEqualTo: _uid)
