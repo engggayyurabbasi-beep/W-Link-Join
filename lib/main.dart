@@ -2135,8 +2135,16 @@ class SavedGroupsScreen extends ConsumerWidget {
 // PROFILE
 // -----------------------------------------------------------------------------
 
-class MembershipPlansScreen extends StatelessWidget {
+class MembershipPlansScreen extends StatefulWidget {
   const MembershipPlansScreen({super.key});
+
+  @override
+  State<MembershipPlansScreen> createState() => _MembershipPlansScreenState();
+}
+
+class _MembershipPlansScreenState extends State<MembershipPlansScreen> {
+  String selectedPlan = 'free';
+  String selectedDuration = 'Yearly (12 Months)';
 
   Widget _feature(String text) {
     return Padding(
@@ -2152,21 +2160,103 @@ class MembershipPlansScreen extends StatelessWidget {
     );
   }
 
-  Widget _price(String duration, String price) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
+  Widget _selectionControl(String plan) {
+    final selected = selectedPlan == plan;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: selected
+            ? AppTheme.green.withValues(alpha: 0.12)
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? AppTheme.green : Theme.of(context).dividerColor,
+        ),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(child: Text(duration)),
-          Text(price, style: const TextStyle(fontWeight: FontWeight.w800)),
+          Icon(
+            selected ? Icons.check_circle : Icons.circle_outlined,
+            size: 17,
+            color: selected ? AppTheme.green : null,
+          ),
+          const SizedBox(width: 5),
+          Text(
+            selected ? 'Selected' : 'Select Plan',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: selected ? AppTheme.green : null,
+            ),
+          ),
         ],
       ),
     );
   }
 
+  Widget _priceOption(String duration, String price) {
+    final selected = selectedDuration == duration;
+    return InkWell(
+      onTap: () => setState(() {
+        selectedPlan = 'ad_free';
+        selectedDuration = duration;
+      }),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              size: 20,
+              color: selected ? AppTheme.green : null,
+            ),
+            const SizedBox(width: 9),
+            Expanded(child: Text(duration)),
+            Text(price, style: const TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _decoration(String plan, {bool premium = false}) {
+    final selected = selectedPlan == plan;
+    return BoxDecoration(
+      color: Theme.of(context).cardColor,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: selected
+            ? AppTheme.green
+            : premium
+                ? AppTheme.green.withValues(alpha: 0.45)
+                : Theme.of(context).dividerColor.withValues(alpha: 0.45),
+        width: selected ? 2 : 1,
+      ),
+    );
+  }
+
+  void _continue() {
+    if (selectedPlan == 'free') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You are using the Free Plan.')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Membership payment will be available after Google Play Billing integration.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final freeSelected = selectedPlan == 'free';
+    final adFreeSelected = selectedPlan == 'ad_free';
+
     return PageScaffold(
       title: 'Membership Plans',
       body: ListView(
@@ -2184,19 +2274,18 @@ class MembershipPlansScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          Card(
-            child: Padding(
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => setState(() => selectedPlan = 'free'),
+            child: Container(
+              decoration: _decoration('free'),
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: AppTheme.green,
-                        size: 27,
-                      ),
+                      const Icon(Icons.check_circle, color: AppTheme.green, size: 27),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -2205,7 +2294,7 @@ class MembershipPlansScreen extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
-                      const Chip(label: Text('Default')),
+                      _selectionControl('free'),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -2224,8 +2313,12 @@ class MembershipPlansScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
-          Card(
-            child: Padding(
+
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => setState(() => selectedPlan = 'ad_free'),
+            child: Container(
+              decoration: _decoration('ad_free'),
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2241,6 +2334,7 @@ class MembershipPlansScreen extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
+                      _selectionControl('ad_free'),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -2248,11 +2342,11 @@ class MembershipPlansScreen extends StatelessWidget {
                     'Ad-free access with 10 new group submissions per month.',
                   ),
                   const Divider(height: 24),
-                  _price('Monthly', '₹75'),
-                  _price('Quarterly (3 Months)', '₹199'),
-                  _price('Half-Yearly (6 Months)', '₹349'),
-                  _price('Yearly (12 Months)', '₹499'),
-                  _price('Lifetime', '₹1,100'),
+                  _priceOption('Monthly', '₹75'),
+                  _priceOption('Quarterly (3 Months)', '₹199'),
+                  _priceOption('Half-Yearly (6 Months)', '₹349'),
+                  _priceOption('Yearly (12 Months)', '₹499'),
+                  _priceOption('Lifetime', '₹1,100'),
                   const Divider(height: 20),
                   _feature('No advertisements'),
                   _feature('10 new group submissions per month'),
@@ -2263,15 +2357,12 @@ class MembershipPlansScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
-          Card(
+
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => setState(() => selectedPlan = 'premium'),
             child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: AppTheme.green.withValues(alpha: 0.55),
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(18),
-              ),
+              decoration: _decoration('premium', premium: true),
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2291,6 +2382,7 @@ class MembershipPlansScreen extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ),
+                      _selectionControl('premium'),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -2307,6 +2399,33 @@ class MembershipPlansScreen extends StatelessWidget {
                   _feature('Unlimited group submissions'),
                   _feature('One-year membership'),
                 ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _continue,
+              icon: Icon(
+                freeSelected ? Icons.arrow_forward : Icons.lock_outline,
+              ),
+              label: Text(
+                freeSelected
+                    ? 'Continue with Free'
+                    : adFreeSelected
+                        ? 'Continue to Payment'
+                        : 'Subscribe Now',
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                textStyle: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
               ),
             ),
           ),
